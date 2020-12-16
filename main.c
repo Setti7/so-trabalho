@@ -5,24 +5,37 @@
 #include <unistd.h>
 
 typedef int buffer_item;
-#define BUFFER_SIZE 10
 #define MAX_READERS 10
 #define READERS 13
 
 #define TRUE 1
 
+// Número de leitores atuais
 int reader_count;
+
+// Contêm 1 na posição x se o leitor x está lendo o arquivo, caso contrário, possui -1.
 int current_readers[READERS];
 
-sem_t file_sem, reader_count_sem, queue_slots_sem;
+// Semáforo do arquivo.
+// O file_sem controla o acesso ao arquivo. Ele tem valor inicial 1,
+// então tá funcionando como um mutex, mas o programa para de funcionar
+// caso seja usado um mutex mesmo.
+sem_t file_sem;
 
-buffer_item buffer[BUFFER_SIZE];
-int counter;
+// reader_count_sem é o semáforo que controla o acesso à varíavel reader_count,
+// que possui o número atual de leitores do arquivo.
+// Isso age como um mutex, pois é um semáforo com valor 1. Mas caso seja trocado
+// para o tipo de mutex, o programa não funciona direito.
+sem_t reader_count_sem;
+
+// queue_slots_sem é o semáforo que permite o acesso concorrente de até no máximo MAX_READERS
+// ao arquivo.
+sem_t queue_slots_sem;
 
 pthread_t tid;
 pthread_attr_t attr;
 
-/* msleep(): Sleep for the requested number of milliseconds. */
+// Função para fazer sleep de milisegundos.
 int msleep(long msec) {
     struct timespec ts;
     int res;
@@ -63,18 +76,31 @@ void clear_current_readers() {
 _Noreturn void *writer(void *param) {
     buffer_item item;
 
+    // sleep para dar um tempo de startup para ser mais fácil de testar.
+    // Pode ser removido na versão final.
     sleep(1);
 
     while (TRUE) {
 
-        sem_wait(&file_sem); // gain access to the database
+        /*
+         * Aqui deve ser criado o item que for escrever no arquivo, antes de
+         * bloquear a execução dos outros processos.
+         * */
+
+        // ganha acesso ao arquivo
+        sem_wait(&file_sem);
         printf("Writing to file...\n");
 
         sleep(1);
+        /*
+         * Aqui deve ser feito a operação com o arquivo.
+         * */
 
+        // desbloqueia acesso ao arquivi
         printf("Unblocking file...\n");
-        sem_post(&file_sem); // release exclusive access to the database
+        sem_post(&file_sem);
 
+        // sleep apenas para testar. Pode ser removido na versão final.
         sleep(1);
     }
 }
@@ -88,56 +114,69 @@ _Noreturn void *reader(void *param) {
     sleep(2);
 
     while (TRUE) {
-        // sleep(1);
-        // printf("Reader %d is waiting\n", *consumerID);
 
         // Ocupa uma vaga na fila dos leitores, se não tiver vaga, espera.
         sem_wait(&queue_slots_sem);
 
-        sem_wait(&reader_count_sem); // gain access to reader_count
-
-        reader_count = reader_count + 1;       // increment the reader_count
+        // Ganha acesso ao reader_count e o incrementa, já que o processo
+        // atual vai acessar o arquivo. Além disso, adiciona o processo
+        // atual à lista dos leitores.
+        sem_wait(&reader_count_sem);
+        reader_count++;
         add_to_current_readers(*consumerID);
 
+        // Caso esse processo seja o primeiro a ler o arquivo, damos um down do semáforo do arquivo
+        // para previnir que o escritor ganhe acesso. Isso só é feito para o primeiro leitor pois
+        // os outros leitores poderão acessar o arquivo simultanêamente.
         if (reader_count == 1) {
-            // if this is the first process to read the database,
-            // a down on db is executed to prevent access to the
-            // database by a writing process
             sem_wait(&file_sem);
-            // printf("Reader %d is the first to get in. Block writing.\n", *consumerID);
         }
+
+        // Para debug apenas. Talvez seja interessante deixar para mostrar para a Sarita que no máximo,
+        // MAX_READERS estão tendo acesso ao arquivo e quais são eles.
         print_current_readers();
 
-        // allow other processes to access reader_count
+        // desbloqueia o acesso ao reader_count
         sem_post(&reader_count_sem);
 
 
         msleep(100);
-        // printf("Reader %d is reading\n", *consumerID);
+        /*
+         * Aqui deve ser feito a operação com o arquivo.
+         * */
+
+        // Ganha acesso ao reader_count e o decrementa, já que o processo
+        // atual vai para de acessar o arquivo. Além disso, remove o processo
+        // atual da lista dos leitores.
+        sem_wait(&reader_count_sem);
+        reader_count--;
+        remove_from_current_reader(*consumerID);
 
 
-        sem_wait(&reader_count_sem); // gain access to reader_count
-        reader_count = reader_count - 1; // decrement reader_count
+        // Caso esse processo seja o último a para de ler o arquivo, damos um up
+        // no semáforo do arquivo para permitir que o escritor ganhe acesso.
         if (reader_count == 0) {
-            // if there are no more processes reading from the
-            // database, allow writing process to access the data
-            // printf("Reader %d is the last reader to exit. Allow writing.\n", *consumerID);
-            clear_current_readers();
             sem_post(&file_sem);
         }
-        remove_from_current_reader(*consumerID);
+
+        // Para debug apenas. Talvez seja interessante deixar para mostrar para a Sarita que no máximo,
+        // MAX_READERS estão tendo acesso ao arquivo e quais são eles.
         print_current_readers();
-        // allow other processes to access reader_countuse_data();
-        // use the data read from the database (non-critical)
+
+        // Permitir que outro processo acesse reader_count e libera uma vaga para leitura.
         sem_post(&reader_count_sem);
         sem_post(&queue_slots_sem);
 
+        // sleep para debug apenas
         msleep(2000);
     }
 }
 
-void initializeData() {
 
+int main() {
+    int i;
+
+    // Inicializa os semáforos, vetores e os atributos das threads.
     clear_current_readers();
 
     sem_init(&file_sem, 0, 1);
@@ -146,35 +185,20 @@ void initializeData() {
 
     pthread_attr_init(&attr);
 
-    counter = 0;
-}
-
-int main() {
-    /* Loop counter */
-    int i;
-
-    int numCons = READERS; /* Number of consumer threads */
-
-    /* Initialize the app */
-    initializeData();
-
+    // Cria apenas uma thread de escritor.
     pthread_create(&tid, &attr, writer, NULL);
 
     int taskIds[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
 
-    /* Create the consumer threads */
-    for (i = 0; i < numCons; i++) {
-        /* Create the thread */
+    // Cria as threads dos leitores
+    for (i = 0; i < READERS; i++) {
         pthread_create(&tid, &attr, reader, &taskIds[i]);
     }
 
-    /* Sleep for the specified amount of time in milliseconds */
-    /* Create the consumer threads */
+    // Ao invés de um sleep longo é usado vários pequenos para facilitar o debug.
     for (i = 0; i < 20; i++) {
         sleep(1);
     }
 
-    /* Exit the program */
-    printf("Exit the program\n");
     exit(0);
 }
