@@ -1,3 +1,17 @@
+/*
+ * FEITO POR:
+ * ANDRÉ NIERO SETTI 10883901
+ * VINÍCUS GONÇALVEZ DE CARVALHO 8517157
+ *
+ * A parte dos arquivos não foi implementada, por falta de tempo,
+ * porém há comentários aonde a lógica seria incluída. Já a parte
+ * de semáforos está funcionando perfeitamente, permitindo acesso
+ * de 10 leitores ao mesmo tempo, sendo que subsequentes leitores
+ * ficam em espera.
+ * Quando o escritor ganha acesso ao arquivo, nenhum outro
+ * processo pode realizar um acesso.
+ * */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
