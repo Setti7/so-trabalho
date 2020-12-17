@@ -46,7 +46,7 @@ int msleep(long msec) {
 }
 
 void print_current_readers() {
-    printf("Readers: ");
+    printf("Leitores: ");
 
     for (int i = 0; i < READERS; i++) {
         if (current_readers[i] == 1)
@@ -86,7 +86,7 @@ _Noreturn void *writer(void *param) {
 
         // Ganha acesso ao arquivo
         sem_wait(&file_sem);
-        printf("Writing to file...\n");
+        printf("Escrevendo no arquivo...\n");
 
         sleep(1);
         /*
@@ -94,7 +94,7 @@ _Noreturn void *writer(void *param) {
          * */
 
         // Desbloqueia acesso ao arquivo
-        printf("Unblocking file...\n");
+        printf("Liberando arquivo...\n");
         sem_post(&file_sem);
 
         // sleep apenas para testar. Pode ser removido na versão final.
@@ -106,7 +106,7 @@ _Noreturn void *reader(void *param) {
     buffer_item item;
     int *consumerID = (int *) param;
 
-    printf("consumer %d created\n", *consumerID);
+    printf("Leitor %d criado\n", *consumerID);
 
     sleep(2);
 
