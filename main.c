@@ -13,23 +13,20 @@ typedef int buffer_item;
 // Número de leitores atuais
 int reader_count;
 
-// Contêm 1 na posição x se o leitor x está lendo o arquivo, caso contrário, possui -1.
+// Contêm 1 na posição x se o leitor x está lendo o arquivo, caso contrário,
+// possui -1.
 int current_readers[READERS];
 
 // Semáforo do arquivo.
-// O file_sem controla o acesso ao arquivo. Ele tem valor inicial 1,
-// então tá funcionando como um mutex, mas o programa para de funcionar
-// caso seja usado um mutex mesmo.
+// O file_sem controla o acesso ao arquivo. Ele tem valor inicial 1.
 sem_t file_sem;
 
 // reader_count_sem é o semáforo que controla o acesso à varíavel reader_count,
-// que possui o número atual de leitores do arquivo.
-// Isso age como um mutex, pois é um semáforo com valor 1. Mas caso seja trocado
-// para o tipo de mutex, o programa não funciona direito.
+// que possui o número atual de leitores do arquivo. Tem valor inicial 1.
 sem_t reader_count_sem;
 
-// queue_slots_sem é o semáforo que permite o acesso concorrente de até no máximo MAX_READERS
-// ao arquivo.
+// queue_slots_sem é o semáforo que permite o acesso concorrente de até no máximo
+// MAX_READERS ao arquivo.
 sem_t queue_slots_sem;
 
 pthread_t tid;
@@ -87,7 +84,7 @@ _Noreturn void *writer(void *param) {
          * bloquear a execução dos outros processos.
          * */
 
-        // ganha acesso ao arquivo
+        // Ganha acesso ao arquivo
         sem_wait(&file_sem);
         printf("Writing to file...\n");
 
@@ -96,7 +93,7 @@ _Noreturn void *writer(void *param) {
          * Aqui deve ser feito a operação com o arquivo.
          * */
 
-        // desbloqueia acesso ao arquivi
+        // Desbloqueia acesso ao arquivo
         printf("Unblocking file...\n");
         sem_post(&file_sem);
 
@@ -125,15 +122,17 @@ _Noreturn void *reader(void *param) {
         reader_count++;
         add_to_current_readers(*consumerID);
 
-        // Caso esse processo seja o primeiro a ler o arquivo, damos um down do semáforo do arquivo
-        // para previnir que o escritor ganhe acesso. Isso só é feito para o primeiro leitor pois
-        // os outros leitores poderão acessar o arquivo simultanêamente.
+        // Caso esse processo seja o primeiro a ler o arquivo, damos um down
+        // do semáforo do arquivo para previnir que o escritor ganhe acesso.
+        // Isso só é feito para o primeiro leitor pois os outros leitores
+        // poderão acessar o arquivo simultanêamente.
         if (reader_count == 1) {
             sem_wait(&file_sem);
         }
 
-        // Para debug apenas. Talvez seja interessante deixar para mostrar para a Sarita que no máximo,
-        // MAX_READERS estão tendo acesso ao arquivo e quais são eles.
+        // Para debug apenas. Talvez seja interessante deixar para mostrar
+        // que no máximo MAX_READERS estão tendo acesso ao arquivo e quais
+        // são eles.
         print_current_readers();
 
         // desbloqueia o acesso ao reader_count
@@ -159,11 +158,13 @@ _Noreturn void *reader(void *param) {
             sem_post(&file_sem);
         }
 
-        // Para debug apenas. Talvez seja interessante deixar para mostrar para a Sarita que no máximo,
-        // MAX_READERS estão tendo acesso ao arquivo e quais são eles.
+        // Para debug apenas. Talvez seja interessante deixar para mostrar
+        // que no máximo MAX_READERS estão tendo acesso ao arquivo e quais
+        // são eles.
         print_current_readers();
 
-        // Permitir que outro processo acesse reader_count e libera uma vaga para leitura.
+        // Permitir que outro processo acesse reader_count e libera uma vaga para
+        // leitura.
         sem_post(&reader_count_sem);
         sem_post(&queue_slots_sem);
 
